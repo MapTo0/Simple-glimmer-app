@@ -1,0 +1,13 @@
+{
+	"version": 3,
+	"file": "app.css",
+	"sourceRoot": "/Users/i309691/Desktop/UI5-evo/simple-app/app/styles",
+	"sources": [
+		"../sass_compiler-input_base_path-UtR41lHC.tmp/src/ui/styles/app.scss"
+	],
+	"sourcesContent": [
+		"h1 {\n  color: #444;\n}\n"
+	],
+	"names": [],
+	"mappings": "AAAA,AAAA,EAAE,CAAC;EACD,KAAK,EAAE,IAAI,GACZ"
+}
