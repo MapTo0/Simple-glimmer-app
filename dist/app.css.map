@@ -3,7 +3,7 @@
 	"file": "app.css",
 	"sourceRoot": "/Users/i309691/Desktop/UI5-evo/simple-app/app/styles",
 	"sources": [
-		"../sass_compiler-input_base_path-UtR41lHC.tmp/src/ui/styles/app.scss"
+		"../sass_compiler-input_base_path-w22LDYhB.tmp/src/ui/styles/app.scss"
 	],
 	"sourcesContent": [
 		"h1 {\n  color: #444;\n}\n"

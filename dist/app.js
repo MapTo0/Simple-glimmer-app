@@ -678,6 +678,67 @@ class IteratorSynchronizer {
     }
 }
 
+function tracked(...dependencies) {
+    let target = dependencies[0],
+        key = dependencies[1],
+        descriptor = dependencies[2];
+
+    if (typeof target === "string") {
+        return function (target, key, descriptor) {
+            return descriptorForTrackedComputedProperty(target, key, descriptor, dependencies);
+        };
+    } else {
+        if (descriptor) {
+            return descriptorForTrackedComputedProperty(target, key, descriptor, []);
+        } else {
+            installTrackedProperty(target, key);
+        }
+    }
+}
+function descriptorForTrackedComputedProperty(target, key, descriptor, dependencies) {
+    let meta = metaFor(target);
+    meta.trackedProperties[key] = true;
+    meta.trackedPropertyDependencies[key] = dependencies || [];
+    return {
+        enumerable: true,
+        configurable: false,
+        get: descriptor.get,
+        set: function set() {
+            metaFor(this).dirtyableTagFor(key).inner.dirty();
+            descriptor.set.apply(this, arguments);
+            propertyDidChange();
+        }
+    };
+}
+/**
+  Installs a getter/setter for change tracking. The accessor
+  acts just like a normal property, but it triggers the `propertyDidChange`
+  hook when written to.
+
+  Values are saved on the object using a "shadow key," or a symbol based on the
+  tracked property name. Sets write the value to the shadow key, and gets read
+  from it.
+ */
+function installTrackedProperty(target, key) {
+    let value;
+    let shadowKey = Symbol(key);
+    let meta = metaFor(target);
+    meta.trackedProperties[key] = true;
+    if (target[key] !== undefined) {
+        value = target[key];
+    }
+    Object.defineProperty(target, key, {
+        configurable: true,
+        get() {
+            return this[shadowKey];
+        },
+        set(newValue) {
+            metaFor(this).dirtyableTagFor(key).inner.dirty();
+            this[shadowKey] = newValue;
+            propertyDidChange();
+        }
+    });
+}
 /**
  * Stores bookkeeping information about tracked properties on the target object
  * and includes helper methods for manipulating and retrieving that data.
@@ -855,129 +916,6 @@ function installDevModeErrorInterceptor(obj, key, throwError) {
     }
 }
 
-/**
- * The `Component` class defines an encapsulated UI element that is rendered to
- * the DOM. A component is made up of a template and, optionally, this component
- * object.
- *
- * ## Defining a Component
- *
- * To define a component, subclass `Component` and add your own properties,
- * methods and lifecycle hooks:
- *
- * ```ts
- * import Component from '@glimmer/component';
- *
- * export default class extends Component {
- * }
- * ```
- *
- * ## Lifecycle Hooks
- *
- * Lifecycle hooks allow you to respond to changes to a component, such as when
- * it gets created, rendered, updated or destroyed. To add a lifecycle hook to a
- * component, implement the hook as a method on your component subclass.
- *
- * For example, to be notified when Glimmer has rendered your component so you
- * can attach a legacy jQuery plugin, implement the `didInsertElement()` method:
- *
- * ```ts
- * import Component from '@glimmer/component';
- *
- * export default class extends Component {
- *   didInsertElement() {
- *     $(this.element).pickadate();
- *   }
- * }
- * ```
- *
- * ## Data for Templates
- *
- * `Component`s have two different kinds of data, or state, that can be
- * displayed in templates:
- *
- * 1. Arguments
- * 2. Properties
- *
- * Arguments are data that is passed in to a component from its parent
- * component. For example, if I have a `user-greeting` component, I can pass it
- * a name and greeting to use:
- *
- * ```hbs
- * <user-greeting @name="Ricardo" @greeting="Olá">
- * ```
- *
- * Inside my `user-greeting` template, I can access the `@name` and `@greeting`
- * arguments that I've been given:
- *
- * ```hbs
- * {{@greeting}}, {{@name}}!
- * ```
- *
- * Arguments are also available inside my component:
- *
- * ```ts
- * console.log(this.args.greeting); // prints "Olá"
- * ```
- *
- * Properties, on the other hand, are internal to the component and declared in
- * the class. You can use properties to store data that you want to show in the
- * template, or pass to another component as an argument.
- *
- * ```ts
- * import Component from '@glimmer/component';
- *
- * export default class extends Component {
- *   user = {
- *     name: 'Robbie'
- *   }
- * }
- * ```
- *
- * In the above example, we've defined a component with a `user` property that
- * contains an object with its own `name` property.
- *
- * We can render that property in our template:
- *
- * ```hbs
- * Hello, {{user.name}}!
- * ```
- *
- * We can also take that property and pass it as an argument to the
- * `user-greeting` component we defined above:
- *
- * ```hbs
- * <user-greeting @greeting="Hello" @name={{user.name}} />
- * ```
- *
- * ## Arguments vs. Properties
- *
- * Remember, arguments are data that was given to your component by its parent
- * component, and properties are data your component has defined for itself.
- *
- * You can tell the difference between arguments and properties in templates
- * because arguments always start with an `@` sign (think "A is for arguments"):
- *
- * ```hbs
- * {{@firstName}}
- * ```
- *
- * We know that `@firstName` came from the parent component, not the current
- * component, because it starts with `@` and is therefore an argument.
- *
- * On the other hand, if we see:
- *
- * ```hbs
- * {{name}}
- * ```
- *
- * We know that `name` is a property on the component. If we want to know where
- * the data is coming from, we can go look at our component class to find out.
- *
- * Inside the component itself, arguments always show up inside the component's
- * `args` property. For example, if `{{@firstName}}` is `Tom` in the template,
- * inside the component `this.args.firstName` would also be `Tom`.
- */
 class Component {
   /**
    * Constructs a new component and assigns itself the passed properties. You
@@ -4284,7 +4222,6 @@ class DidUpdateLayoutOpcode extends UpdatingOpcode {
     }
 }
 
-/* tslint:disable */
 function debugCallback(context, get) {
     console.info('Use `context`, and `get(<path>)` to debug this template.');
     // for example...
@@ -6422,9 +6359,6 @@ function getCloseBlockDepth(node) {
     }
 }
 
-/**
- * The base PathReference.
- */
 class ComponentPathReference {
     get(key) {
         return PropertyReference.create(this, key);
@@ -8123,9 +8057,44 @@ class BasicRegistry {
 
 class SimpleApp extends Component {}
 
-var __ui_components_SimpleApp_template__ = { "id": "KfYFXZle", "block": "{\"symbols\":[],\"statements\":[[6,\"div\"],[8],[6,\"h1\"],[8],[0,\"Welcome to Glimmer!\"],[9],[9],[0,\"\\n\"]],\"hasEval\":false}", "meta": { "specifier": "template:/simple-app/components/SimpleApp" } };
+var __ui_components_Label_template__ = { "id": "y92s9kNe", "block": "{\"symbols\":[\"@id\",\"@text\"],\"statements\":[[6,\"label\"],[11,\"id\",[21,1,[]],null],[8],[1,[21,2,[]],false],[9]],\"hasEval\":false}", "meta": { "specifier": "template:/simple-app/components/Label" } };
 
-var moduleMap = { 'component:/simple-app/components/SimpleApp': SimpleApp, 'template:/simple-app/components/SimpleApp': __ui_components_SimpleApp_template__ };
+var __decorate = undefined && undefined.__decorate || function (decorators, target, key, desc) {
+    var c = arguments.length,
+        r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc,
+        d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+class SimpleApp$1 extends Component {
+    constructor(options) {
+        super(options);
+        this.examples = [];
+        this.examples2 = [];
+        this.temp = [];
+        for (var i = 0; i < 5000; ++i) {
+            this.examples.push({ text: Math.random().toString(), id: "label-" + i });
+            this.examples2.push({ text: Math.random().toString(), id: Math.random().toString() });
+        }
+    }
+    updateGlimmer() {
+        setTimeout(clearInterval, 60000, setInterval(function () {
+            this.temp = this.examples;
+            this.examples = this.examples2;
+            this.examples2 = this.temp;
+        }.bind(this), 0));
+    }
+    didInsertElement() {
+        this.updateGlimmer();
+    }
+}
+__decorate([tracked], SimpleApp$1.prototype, "examples", void 0);
+__decorate([tracked], SimpleApp$1.prototype, "examples2", void 0);
+__decorate([tracked], SimpleApp$1.prototype, "temp", void 0);
+
+var __ui_components_SimpleApp_template__ = { "id": "MIFpkO4D", "block": "{\"symbols\":[\"label\"],\"statements\":[[6,\"div\"],[8],[0,\"\\n\"],[4,\"each\",[[22,[\"examples\"]]],[[\"key\"],[\"@index\"]],{\"statements\":[[0,\"    \"],[6,\"div\"],[8],[0,\"\\n      \"],[5,\"Label\",[],[[\"@text\",\"@id\"],[[21,1,[\"text\"]],[21,1,[\"id\"]]]],{\"statements\":[],\"parameters\":[]}],[0,\"\\n    \"],[9],[0,\"\\n\"]],\"parameters\":[1]},null],[9],[0,\"\\n\"]],\"hasEval\":false}", "meta": { "specifier": "template:/simple-app/components/SimpleApp" } };
+
+var moduleMap = { 'component:/simple-app/components/Label': SimpleApp, 'template:/simple-app/components/Label': __ui_components_Label_template__, 'component:/simple-app/components/SimpleApp': SimpleApp$1, 'template:/simple-app/components/SimpleApp': __ui_components_SimpleApp_template__ };
 
 var resolverConfiguration = { "app": { "name": "simple-app", "rootName": "simple-app" }, "types": { "application": { "definitiveCollection": "main" }, "component": { "definitiveCollection": "components" }, "component-test": { "unresolvable": true }, "helper": { "definitiveCollection": "components" }, "helper-test": { "unresolvable": true }, "renderer": { "definitiveCollection": "main" }, "template": { "definitiveCollection": "components" } }, "collections": { "main": { "types": ["application", "renderer"] }, "components": { "group": "ui", "types": ["component", "component-test", "template", "helper", "helper-test"], "defaultType": "component", "privateCollections": ["utils"] }, "styles": { "group": "ui", "unresolvable": true }, "utils": { "unresolvable": true } } };
 

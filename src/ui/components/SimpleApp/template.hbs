@@ -1,1 +1,7 @@
-<div><h1>Welcome to Glimmer!</h1></div>
+<div>
+  {{#each examples key="@index" as |label|}}
+    <div>
+      <Label @text={{label.text}} @id={{label.id}}></Label>
+    </div>
+  {{/each}}
+</div>
